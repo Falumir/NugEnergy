@@ -5,7 +5,6 @@ local doFadeOut = true
 local fadeAfter = 5
 local fadeTime = 1
 local onlyText = false
-local shouldBeFull = false
 local isFull = true
 local isVertical
 
@@ -69,42 +68,15 @@ local Enum_PowerType_RunicPower = EPT.RunicPower
 local Enum_PowerType_LunarPower = EPT.LunarPower
 local Enum_PowerType_Focus = EPT.Focus
 local class = select(2,UnitClass("player"))
-local UnitAura = UnitAura
 
 local ColorArray = function(color) return {color.r, color.g, color.b} end
 
 local defaults = {
-    global = {
-        classConfig = {
-            ROGUE = { "EnergyRogue", "EnergyRogue", "EnergyRogue" },
-            DRUID = { "ShapeshiftDruid", "ShapeshiftDruid", "ShapeshiftDruid", "ShapeshiftDruid" },
-            PALADIN = { "Disabled", "Disabled", "Disabled" },
-            MONK = { "EnergyBrewmaster", "Disabled", "EnergyWindwalker" },
-            WARLOCK = { "Disabled", "Disabled", "Disabled" },
-            DEMONHUNTER = { "FuryDemonHunter", "FuryDemonHunter" },
-            DEATHKNIGHT = { "RunicPowerDeathstrike", "RunicPower", "RunicPower" },
-            MAGE = { "MageMana", "Disabled", "Disabled" },
-            WARRIOR = { "RageWarriorExecute", "RageWarriorExecute", "RageWarriorExecute" },
-            SHAMAN = { "Maelstrom", "Disabled", "Disabled" },
-            HUNTER = { "Focus", "Focus", "Focus" },
-            PRIEST = { "Disabled", "Disabled", "Insanity" },
-            EVOKER = { "Disabled", "Disabled", "Disabled" },
-        },
-    },
     profile = {
         point = "CENTER",
         x = 0, y = 0,
         marks = {},
-        focus = true,
-        rage = true,
-        mana = false,
-        energy = true,
-        fury = true,
-        shards = false,
-        runic = true,
-        balance = true,
-        insanity = true,
-        maelstrom = true,
+
         -- powerTypeColors = true,
         -- focusColor = true
 
@@ -147,6 +119,8 @@ local defaults = {
         outOfCombatAlpha = 0,
         isVertical = false,
 
+        disabledPowerTypes = {},
+
         twEnabled = true,
         twColor = { 0.15, 0.9, 0.4 }, -- tick window color
         twEnabledCappedOnly = true,
@@ -159,55 +133,6 @@ local defaults = {
         soundChannel = "SFX",
     }
 }
-
-if APILevel <= 3 then
-    defaults.global.classConfig = {
-        ROGUE = { "EnergyRogue", "EnergyRogue", "EnergyRogue" },
-        DRUID = { "ShapeshiftDruidClassic", "ShapeshiftDruidClassic", "ShapeshiftDruidClassic", "ShapeshiftDruidClassic" },
-        PALADIN = { "Disabled", "Disabled", "Disabled" },
-        MONK = { "Disabled", "Disabled", "Disabled" },
-        WARLOCK = { "Disabled", "Disabled", "Disabled" },
-        DEMONHUNTER = { "Disabled", "Disabled" },
-        DEATHKNIGHT = { "RunicPower", "RunicPower", "RunicPower" },
-        MAGE = { "Disabled", "Disabled", "Disabled" },
-        WARRIOR = { "RageWarriorClassic", "RageWarriorClassic", "RageWarriorClassic" },
-        SHAMAN = { "Disabled", "Disabled", "Disabled" },
-        HUNTER = { "Disabled", "Disabled", "Disabled" },
-        PRIEST = { "Disabled", "Disabled", "Disabled" },
-    }
-end
-if APILevel == 4 then
-    defaults.global.classConfig = {
-        ROGUE = { "EnergyRogue", "EnergyRogue", "EnergyRogue" },
-        DRUID = { "ShapeshiftDruid", "ShapeshiftDruid", "ShapeshiftDruid", "ShapeshiftDruid" },
-        PALADIN = { "Disabled", "Disabled", "Disabled" },
-        MONK = { "Disabled", "Disabled", "Disabled" },
-        WARLOCK = { "Disabled", "Disabled", "Disabled" },
-        DEMONHUNTER = { "Disabled", "Disabled" },
-        DEATHKNIGHT = { "RunicPower", "RunicPower", "RunicPower" },
-        MAGE = { "Disabled", "Disabled", "Disabled" },
-        WARRIOR = { "RageWarrior", "RageWarrior", "RageWarrior" },
-        SHAMAN = { "Disabled", "Disabled", "Disabled" },
-        HUNTER = { "Focus", "Focus", "Focus" },
-        PRIEST = { "Disabled", "Disabled", "Disabled" },
-    }
-end
-if APILevel == 5 then
-    defaults.global.classConfig = {
-        ROGUE = { "EnergyRogue", "EnergyRogue", "EnergyRogue" },
-        DRUID = { "ShapeshiftDruid", "ShapeshiftDruid", "ShapeshiftDruid", "ShapeshiftDruid" },
-        PALADIN = { "Disabled", "Disabled", "Disabled" },
-        MONK = { "EnergyMonk", "EnergyMonk", "EnergyMonk" },
-        WARLOCK = { "Disabled", "Disabled", "Disabled" },
-        DEMONHUNTER = { "Disabled", "Disabled" },
-        DEATHKNIGHT = { "RunicPower", "RunicPower", "RunicPower" },
-        MAGE = { "Disabled", "Disabled", "Disabled" },
-        WARRIOR = { "RageWarrior", "RageWarrior", "RageWarrior" },
-        SHAMAN = { "Disabled", "Disabled", "Disabled" },
-        HUNTER = { "Focus", "Focus", "Focus" },
-        PRIEST = { "Disabled", "Disabled", "Disabled" },
-    }
-end
 
 local normalColor = defaults.profile.normalColor
 local lowColor = defaults.profile.lowColor
@@ -263,48 +188,6 @@ function NugEnergy:UpdateUpvalues()
     end
 end
 
-
-local function FindAura(unit, spellID, filter)
-    for i=1, 100 do
-        -- rank will be removed in bfa
-        local name, icon, count, debuffType, duration, expirationTime, unitCaster, canStealOrPurge, nameplateShowPersonal, auraSpellID = UnitAura(unit, i, filter)
-        if not name then return nil end
-        if spellID == auraSpellID then
-            return name, icon, count, debuffType, duration, expirationTime, unitCaster, canStealOrPurge, nameplateShowPersonal, auraSpellID
-        end
-    end
-end
-
-local GetPowerBy5 = function(unit)
-    local p = UnitPower(unit)
-    local pmax = UnitPowerMax(unit)
-    -- p, p2, execute, shine, capped, insufficient
-    return p, math_modf(p/5)*5, nil, nil, p == pmax, nil
-end
-
-local RageBarGetPower = function(shineZone, cappedZone, minLimit, throttleText)
-    return function(unit)
-        local p = UnitPower(unit, PowerTypeIndex)
-        local pmax = UnitPowerMax(unit, PowerTypeIndex)
-        local shine = shineZone and (p >= pmax-shineZone)
-        -- local state
-        -- if p >= pmax-10 then state = "CAPPED" end
-        -- if GetSpecialization() == 3  p < 60 pmax-10
-        local capped = p >= pmax-cappedZone
-        local p2 = throttleText and math_modf(p/5)*5
-        return p, p2, execute, shine, capped, (minLimit and p < minLimit)
-    end
-end
-
-local ManaBarGetPower = function(shineZone, cappedZone, minLimit, throttleText)
-    return function(unit)
-        local p = UnitPower(unit, PowerTypeIndex)
-        local pmax = UnitPowerMax(unit, PowerTypeIndex)
-        local p2 = math.floor(p/pmax*100)
-        return p, p2
-    end
-end
-
 function NugEnergy.Initialize(self)
     -- self:RegisterEvent("UNIT_POWER_UPDATE")
     -- self:RegisterEvent("UNIT_MAXPOWER")
@@ -332,6 +215,11 @@ function NugEnergy.Initialize(self)
     end
 
     self:RegisterEvent("SPELLS_CHANGED")
+    self:RegisterEvent("UNIT_DISPLAYPOWER")
+    self.UNIT_DISPLAYPOWER = function(self, event, unit)
+        if unit ~= "player" then return end
+        self:UpdateConfig()
+    end
     self:SPELLS_CHANGED()
 
     self:UPDATE_STEALTH()
@@ -421,15 +309,6 @@ NugEnergy.__UpdateEnergy = NugEnergy.UpdateEnergy
 --     end
 -- end
 
-function NugEnergy:Disable()
-    PowerFilter = nil
-    PowerTypeIndex = nil
-    self:UnregisterEvent("UNIT_POWER_UPDATE")
-    self:UnregisterEvent("UNIT_MAXPOWER")
-    self:UnregisterEvent("PLAYER_REGEN_DISABLED")
-    self:Hide()
-end
-
 function NugEnergy.UNIT_HEALTH(self, event, unit)
     if unit ~= "target" then return end
     local uhm = UnitHealthMax(unit)
@@ -508,7 +387,7 @@ function NugEnergy:UpdateVisibility()
     local inCombat = UnitAffectingCombat("player")
     upvalueInCombat = inCombat
     if (inCombat or
-        ((class == "ROGUE" or class == "DRUID") and IsStealthed() and (self.ticker.isEnabled or (shouldBeFull and not isFull))) or
+        ((class == "ROGUE" or class == "DRUID") and IsStealthed() and (self.ticker.isEnabled or (self.flags.shouldBeFull and not isFull))) or
         ForcedToShow)
         and PowerFilter
     then
@@ -1274,44 +1153,40 @@ NugEnergy.Commands = {
         NugEnergy:Resize()
     end,
     ["rage"] = function(v)
-        NugEnergy.db.profile.rage = not NugEnergy.db.profile.rage
-        NugEnergy:Initialize()
+        NugEnergy.db.profile.disabledPowerTypes["RAGE"] = not NugEnergy.db.profile.disabledPowerTypes["RAGE"] or nil
+        NugEnergy:UpdateConfig()
     end,
     ["energy"] = function(v)
-        NugEnergy.db.profile.energy = not NugEnergy.db.profile.energy
-        NugEnergy:Initialize()
+        NugEnergy.db.profile.disabledPowerTypes["ENERGY"] = not NugEnergy.db.profile.disabledPowerTypes["ENERGY"] or nil
+        NugEnergy:UpdateConfig()
     end,
     ["focus"] = function(v)
-        NugEnergy.db.profile.focus = not NugEnergy.db.profile.focus
-        NugEnergy:Initialize()
-    end,
-    ["shards"] = function(v)
-        NugEnergy.db.profile.shards = not NugEnergy.db.profile.shards
-        NugEnergy:Initialize()
+        NugEnergy.db.profile.disabledPowerTypes["FOCUS"] = not NugEnergy.db.profile.disabledPowerTypes["FOCUS"] or nil
+        NugEnergy:UpdateConfig()
     end,
     ["runic"] = function(v)
-        NugEnergy.db.profile.runic = not NugEnergy.db.profile.runic
-        NugEnergy:Initialize()
+        NugEnergy.db.profile.disabledPowerTypes["RUNIC_POWER"] = not NugEnergy.db.profile.disabledPowerTypes["RUNIC_POWER"] or nil
+        NugEnergy:UpdateConfig()
     end,
     ["balance"] = function(v)
-        NugEnergy.db.profile.balance = not NugEnergy.db.profile.balance
-        NugEnergy:Initialize()
+        NugEnergy.db.profile.disabledPowerTypes["LUNAR_POWER"] = not NugEnergy.db.profile.disabledPowerTypes["LUNAR_POWER"] or nil
+        NugEnergy:UpdateConfig()
     end,
     ["insanity"] = function(v)
-        NugEnergy.db.profile.insanity = not NugEnergy.db.profile.insanity
-        NugEnergy:Initialize()
+        NugEnergy.db.profile.disabledPowerTypes["INSANITY"] = not NugEnergy.db.profile.disabledPowerTypes["INSANITY"] or nil
+        NugEnergy:UpdateConfig()
     end,
     ["mana"] = function(v)
-        NugEnergy.db.profile.mana = not NugEnergy.db.profile.mana
-        NugEnergy:Initialize()
+        NugEnergy.db.profile.disabledPowerTypes["MANA"] = not NugEnergy.db.profile.disabledPowerTypes["MANA"] or nil
+        NugEnergy:UpdateConfig()
     end,
     ["fury"] = function(v)
-        NugEnergy.db.profile.fury = not NugEnergy.db.profile.fury
-        NugEnergy:Initialize()
+        NugEnergy.db.profile.disabledPowerTypes["FURY"] = not NugEnergy.db.profile.disabledPowerTypes["FURY"] or nil
+        NugEnergy:UpdateConfig()
     end,
     ["maelstrom"] = function(v)
-        NugEnergy.db.profile.maelstrom = not NugEnergy.db.profile.maelstrom
-        NugEnergy:Initialize()
+        NugEnergy.db.profile.disabledPowerTypes["MAELSTROM"] = not NugEnergy.db.profile.disabledPowerTypes["MAELSTROM"] or nil
+        NugEnergy:UpdateConfig()
     end,
 }
 
@@ -1321,12 +1196,10 @@ local helpMessage = {
     "|cff00ff00/nen unlock|r",
     "|cff00ff00/nen reset|r",
     "|cff00ff00/nen focus|r",
-    "|cff00ff00/nen monk|r",
     "|cff00ff00/nen fury|r",
     "|cff00ff00/nen insanity|r",
     "|cff00ff00/nen runic|r",
     "|cff00ff00/nen balance|r",
-    "|cff00ff00/nen shards|r",
 }
 
 function NugEnergy.SlashCmd(msg)
@@ -1453,13 +1326,63 @@ function NugEnergy:CreateGUI()
         name = "NugEnergy Settings",
         order = 1,
         args = {
-            configSelection = {
+            powerTypeToggles = {
                 type = "group",
-                name = " ",
+                name = "Enabled Power Types",
                 guiInline = true,
                 order = 0.5,
                 args = {
-                }
+                    ENERGY = {
+                        name = "Energy",
+                        type = "toggle",
+                        order = 1,
+                        get = function() return not NugEnergy.db.profile.disabledPowerTypes["ENERGY"] end,
+                        set = function()
+                            NugEnergy.db.profile.disabledPowerTypes["ENERGY"] = not NugEnergy.db.profile.disabledPowerTypes["ENERGY"] or nil
+                            NugEnergy:UpdateConfig()
+                        end,
+                    },
+                    RAGE = {
+                        name = "Rage",
+                        type = "toggle",
+                        order = 2,
+                        get = function() return not NugEnergy.db.profile.disabledPowerTypes["RAGE"] end,
+                        set = function()
+                            NugEnergy.db.profile.disabledPowerTypes["RAGE"] = not NugEnergy.db.profile.disabledPowerTypes["RAGE"] or nil
+                            NugEnergy:UpdateConfig()
+                        end,
+                    },
+                    MANA = {
+                        name = "Mana / FSR",
+                        type = "toggle",
+                        order = 3,
+                        get = function() return not NugEnergy.db.profile.disabledPowerTypes["MANA"] end,
+                        set = function()
+                            NugEnergy.db.profile.disabledPowerTypes["MANA"] = not NugEnergy.db.profile.disabledPowerTypes["MANA"] or nil
+                            NugEnergy:UpdateConfig()
+                        end,
+                    },
+                    RUNIC_POWER = {
+                        name = "Runic Power",
+                        type = "toggle",
+                        order = 4,
+                        get = function() return not NugEnergy.db.profile.disabledPowerTypes["RUNIC_POWER"] end,
+                        set = function()
+                            NugEnergy.db.profile.disabledPowerTypes["RUNIC_POWER"] = not NugEnergy.db.profile.disabledPowerTypes["RUNIC_POWER"] or nil
+                            NugEnergy:UpdateConfig()
+                        end,
+                    },
+                    FOCUS = {
+                        name = "Focus",
+                        type = "toggle",
+                        order = 5,
+                        get = function() return not NugEnergy.db.profile.disabledPowerTypes["FOCUS"] end,
+                        set = function()
+                            NugEnergy.db.profile.disabledPowerTypes["FOCUS"] = not NugEnergy.db.profile.disabledPowerTypes["FOCUS"] or nil
+                            NugEnergy:UpdateConfig()
+                        end,
+                    },
+                },
             },
             unlock = {
                 name = L"Unlock",
@@ -1970,56 +1893,6 @@ function NugEnergy:CreateGUI()
         },
     }
 
-    local specsTable = opt.args.configSelection.args
-    for specIndex=1,GetNumSpecializations() do
-        local id, name, description, icon = GetSpecializationInfo(specIndex)
-        local iconCoords = nil
-        if APILevel <= 3 then
-            icon = "Interface\\GLUES\\CHARACTERCREATE\\UI-CHARACTERCREATE-CLASSES"
-            local _, class = UnitClass('player')
-            iconCoords = CLASS_ICON_TCOORDS[class];
-        end
-        local _, class = UnitClass('player')
-        specsTable["desc"..specIndex] = {
-            name = "",
-            type = "description",
-            width = 0.25,
-            imageWidth = 23,
-            imageHeight = 23,
-            image = icon,
-            imageCoords = iconCoords,
-            order = specIndex*10+1,
-        }
-        specsTable["conf"..specIndex] = {
-            name = "",
-            -- width = 1.5,
-            width = 3.2,
-            type = "select",
-            values = NugEnergy:GetAvailableConfigsForSpec(specIndex),
-            get = function(info) return NugEnergy.db.global.classConfig[class][specIndex] end,
-            set = function(info, v)
-                NugEnergy.db.global.classConfig[class][specIndex] = v
-                NugEnergy:SPELLS_CHANGED()
-                NugEnergy:NotifyGUI()
-            end,
-            order = specIndex*10+2,
-        }
-        -- specsTable["profile"..specIndex] = {
-        --     name = "",
-        --     type = 'select',
-        --     order = specIndex*10+3,
-        --     width = 1.5,
-        --     values = function()
-        --         return GetProfileList(NugEnergy.db)
-        --     end,
-        --     get = function(info) return NugEnergy.db.global.specProfiles[class][specIndex] end,
-        --     set = function(info, v)
-        --         NugEnergy.db.global.specProfiles[class][specIndex] = v
-        --         NugEnergy:SPELLS_CHANGED()
-        --     end,
-        -- }
-    end
-
     if APILevel <= 2 then
         opt.args.ticker = {
             type = "group",
@@ -2191,28 +2064,43 @@ local currentTriggerState = {}
 function NugEnergy:SPELLS_CHANGED()
     self:UpdateConfig()
 end
-function NugEnergy:UpdateConfig(force)
-    local spec = GetSpecialization()
-    local class = select(2,UnitClass("player"))
 
-    -- local currentProfile = self.db:GetCurrentProfile()
-    -- local newSpecProfile = self.db.global.specProfiles[class][spec] or "Default"
-    -- if not self.db.profiles[newSpecProfile] then
-    --     self.db.global.specProfiles[class][spec] = "Default"
-    --     newSpecProfile = "Default"
-    -- end
-    -- if newSpecProfile ~= currentProfile then
-    --     self.db:SetProfile(newSpecProfile)
-    -- end
+function NugEnergy:ResolveConfig(powerType, class, spec)
+    if NugEnergy.db.profile.disabledPowerTypes[powerType] then
+        return "Disabled"
+    end
+    local candidates = ns.powerTypeConfigs[powerType]
+    if not candidates then return "Disabled" end
 
-    local newConfigName = self.db.global.classConfig[class][spec] or "Disabled"
-
-    -- If using missing config reset to default
-    if newConfigName ~= "Disabled" and not configs[newConfigName] then
-        self.db.global.classConfig[class][spec] = defaults.global.classConfig[class][spec]
-        newConfigName = self.db.global.classConfig[class][spec] or "Disabled"
+    -- filter by class
+    local classMatches = {}
+    for _, name in ipairs(candidates) do
+        local config = configs[name]
+        if config and (config.class == class or config.class == "GENERAL") then
+            table.insert(classMatches, name)
+        end
     end
 
+    if #classMatches == 0 then return "Disabled" end
+    if #classMatches == 1 then return classMatches[1] end
+
+    -- multiple matches, prefer spec-specific config
+    for _, name in ipairs(classMatches) do
+        local config = configs[name]
+        if config.specIndex == spec then return name end
+    end
+
+    -- fall back to first match
+    return classMatches[1]
+end
+
+function NugEnergy:UpdateConfig(force)
+    local powerType = select(2, UnitPowerType("player"))
+    local class = select(2, UnitClass("player"))
+    local spec = GetSpecialization()
+
+    local newConfigName = self:ResolveConfig(powerType, class, spec)
+    
     if newConfigName == "Disabled" then
         self:ResetConfig()
         self:Disable()
@@ -2222,18 +2110,15 @@ function NugEnergy:UpdateConfig(force)
         self:Enable()
     end
 
-    local currentConfig = configs[currentConfigName]
-
-    local needUpdate
-    local changedConfig = currentConfigName ~= newConfigName
-    if changedConfig then
-        needUpdate = true
-    else
+    local needUpdate = force or (currentConfigName ~= newConfigName)
+    
+    if not needUpdate then
+        local currentConfig = configs[currentConfigName]
         local newTriggerState = self:GetTriggerState(currentConfig)
         needUpdate = not self:IsTriggerStateEqual(currentTriggerState, newTriggerState)
     end
 
-    if needUpdate or force then
+    if needUpdate then
         self:SelectConfig(newConfigName)
         self:UpdateEnergy()
         self:UpdateVisibility()
@@ -2260,18 +2145,6 @@ function NugEnergy:RegisterConfig(name, config, class, specIndex)
     configs[name] = config
 end
 
-function NugEnergy:GetAvailableConfigsForSpec(specIndex)
-    local _, class = UnitClass("player")
-    local avConfigs = {}
-    for name, config in pairs(configs) do
-        if (config.class == class or config.class == "GENERAL") and (config.specIndex == specIndex or config.specIndex == nil) then
-            avConfigs[name] = name
-        end
-    end
-    avConfigs["Disabled"] = "Disabled"
-    return avConfigs
-end
-
 function NugEnergy:IsTriggerStateEqual(state1, state2)
     if #state1 ~= #state2 then return false end
     for i,v in ipairs(state1) do
@@ -2290,6 +2163,7 @@ function NugEnergy:GetTriggerState(config)
 end
 
 function NugEnergy:ResetConfig()
+    local min, max = self:GetMinMaxValues()
     table.wipe(self.flags)
     self:DisableColorOverride()
     self.eventProxy:UnregisterAllEvents()
@@ -2299,6 +2173,8 @@ function NugEnergy:ResetConfig()
     if self.fsrwatch then
         self.fsrwatch:Disable()
     end
+    self:SetMinMaxValues(min, max)
+    self:OriginalSetValue(0)
 end
 
 function NugEnergy:SelectConfig(name)
@@ -2346,7 +2222,6 @@ do
         end
 
         if db.DB_VERSION == nil then
-            db.global = {}
             db.profiles = {
                 Default = {}
             }

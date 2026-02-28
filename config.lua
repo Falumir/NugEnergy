@@ -18,36 +18,19 @@ local IsAnySpellKnown = function (...)
     end
 end
 
-local GetSpell = function(spellId)
-    return function()
-        return IsPlayerSpell(spellId)
-    end
-end
-
-local GetPowerBy5 = function(unit)
-    local p = UnitPower(unit)
-    local pmax = UnitPowerMax(unit)
-    -- p, p2, execute, shine, capped, insufficient
-    return p, math_modf(p/5)*5, nil, nil, p == pmax, nil
-end
-
-local execute = false
 local function UNIT_HEALTH_EXECUTE(execute_range)
     return function(self, event, unit)
         if unit ~= "target" then return end
         local uhm = UnitHealthMax(unit)
         if uhm == 0 then uhm = 1 end
-        if execute_range then
-            execute = UnitHealth(unit)/uhm < execute_range
-        else
-            execute = false
-        end
+        local inExecute = execute_range and (UnitHealth(unit)/uhm < execute_range) or false
+        NugEnergy:ToggleExecute(inExecute)
         self:UpdateEnergy()
     end
 end
 local function UNIT_HEALTH_EXECUTE_PLAYER_TARGET_CHANGED(self,event)
     if UnitExists('target') then
-        self.eventProxy:UNIT_HEALTH(self, event, "target")
+        self.eventProxy.UNIT_HEALTH(self, event, "target")
     end
 end
 
@@ -111,8 +94,6 @@ end
 
 
 ns.IsAnySpellKnown = IsAnySpellKnown
-ns.GetSpell = GetSpell
-ns.GetPowerBy5 = GetPowerBy5
 ns.UNIT_HEALTH_EXECUTE = UNIT_HEALTH_EXECUTE
 ns.UNIT_HEALTH_EXECUTE_PLAYER_TARGET_CHANGED = UNIT_HEALTH_EXECUTE_PLAYER_TARGET_CHANGED
 ns.MakeGeneralGetPower = MakeGeneralGetPower
@@ -137,32 +118,19 @@ local GetPower_ClassicRogueTicker = function(PowerTypeIndex, shineZone, cappedZo
 end
 
 
+local powerTypeConfigs = {
+    ENERGY = { "EnergyGeneral", "EnergyBrewmaster", "EnergyWindwalker" },
+    RAGE = { "RageGeneral", "RageWarriorExecute" },
+    MANA = { "GeneralMana" },
+    RUNIC_POWER = { "RunicPower", "RunicPowerDeathstrike" },
+    FOCUS = { "Focus" },
+    FURY = { "FuryDemonHunter" },
+    INSANITY = { "Insanity" },
+    MAELSTROM = { "Maelstrom" },
+    LUNAR_POWER = { "LunarPower" },
+}
 
-
-NugEnergy:RegisterConfig("EnergyRogue", {
-    triggers = { GetSpecialization },
-    setup = function(self, spec)
-        self:SetPowerFilter("ENERGY", Enum.PowerType.Energy)
-        self:SetNormalColor()
-        self.flags.shouldBeFull = true
-
-        self.eventProxy:RegisterEvent("UPDATE_STEALTH")
-        self.eventProxy.UPDATE_STEALTH = GENERAL_UPDATE_STEALTH
-
-        self.eventProxy:RegisterUnitEvent("UNIT_MAXPOWER", "player")
-        self.eventProxy.UNIT_MAXPOWER = GENERAL_UNIT_MAXPOWER
-        GENERAL_UNIT_MAXPOWER(self)
-
-        self.eventProxy:RegisterUnitEvent("UNIT_POWER_UPDATE", "player")
-        self.eventProxy.UNIT_POWER_UPDATE = FILTERED_UNIT_POWER_UPDATE("ENERGY")
-
-        self.eventProxy:RegisterUnitEvent("UNIT_POWER_FREQUENT", "player")
-        self.eventProxy.UNIT_POWER_FREQUENT = FILTERED_UNIT_POWER_UPDATE("ENERGY")
-
-        self:SetPowerGetter(MakeGeneralGetPower(Enum.PowerType.Energy, nil, 5, nil, true))
-    end,
-}, "ROGUE")
-
+ns.powerTypeConfigs = powerTypeConfigs
 
 NugEnergy:RegisterConfig("GeneralRage", {
     triggers = { GetSpecialization },
@@ -176,21 +144,15 @@ NugEnergy:RegisterConfig("GeneralRage", {
 
         self.eventProxy:RegisterUnitEvent("UNIT_POWER_UPDATE", "player")
         self.eventProxy.UNIT_POWER_UPDATE = FILTERED_UNIT_POWER_UPDATE("RAGE")
-
-        -- self.eventProxy:RegisterUnitEvent("UNIT_HEALTH", "target")
-        -- self.eventProxy.UNIT_HEALTH = UNIT_HEALTH_EXECUTE(0.2)
-
-        -- self:SetPowerGetter(MakeGeneralGetPower(Enum.PowerType.Rage, 30, 10, nil, nil))
     end,
 }, "TEMPLATE")
-
 
 --------------------------
 --- MAINLINE
 --------------------------
 if isMainline then
 
-    NugEnergy:RegisterConfig("EnergyRogue", {
+    NugEnergy:RegisterConfig("EnergyGeneral", {
         triggers = { GetSpecialization },
         setup = function(self, spec)
             self:SetPowerFilter("ENERGY", Enum.PowerType.Energy)
@@ -212,7 +174,7 @@ if isMainline then
 
             self:SetPowerGetter(MakeGeneralGetPower(Enum.PowerType.Energy, nil, 5, nil, true))
         end,
-    }, "ROGUE")
+    }, "GENERAL")
 
 
     NugEnergy:RegisterConfig("RageWarriorExecute", {
@@ -245,25 +207,6 @@ if isMainline then
         end,
     }, "DEMONHUNTER")
 
-    NugEnergy:RegisterConfig("MageMana", {
-        triggers = { GetSpecialization },
-        setup = function(self, spec)
-            self:SetPowerFilter("MANA", Enum.PowerType.Mana)
-            self:SetNormalColor()
-            self.flags.shouldBeFull = true
-
-            self.eventProxy:RegisterUnitEvent("UNIT_MAXPOWER", "player")
-            self.eventProxy.UNIT_MAXPOWER = GENERAL_UNIT_MAXPOWER
-            GENERAL_UNIT_MAXPOWER(self)
-
-            self.eventProxy:RegisterUnitEvent("UNIT_POWER_UPDATE", "player")
-            self.eventProxy.UNIT_POWER_UPDATE = FILTERED_UNIT_POWER_UPDATE("MANA")
-
-            self:SetPowerGetter(MakeManaGetPower(Enum.PowerType.Mana, 15))
-        end,
-    }, "MAGE")
-
-
     NugEnergy:RegisterConfig("Insanity", {
         triggers = { GetSpecialization },
         setup = function(self, spec)
@@ -284,20 +227,20 @@ if isMainline then
     NugEnergy:RegisterConfig("EnergyBrewmaster", {
         triggers = { GetSpecialization },
         setup = function(self, spec)
-            self:ApplyConfig("EnergyRogue")
+            self:ApplyConfig("EnergyGeneral")
 
             self:SetPowerGetter(MakeGeneralGetPower(Enum.PowerType.Energy, 10, 5, 25, true))
         end,
-    }, "MONK")
+    }, "MONK", 1)
 
     NugEnergy:RegisterConfig("EnergyWindwalker", {
         triggers = { GetSpecialization },
         setup = function(self, spec)
-            self:ApplyConfig("EnergyRogue")
+            self:ApplyConfig("EnergyGeneral")
 
             self:SetPowerGetter(MakeGeneralGetPower(Enum.PowerType.Energy, -1, 5, 50, true))
         end,
-    }, "MONK")
+    }, "MONK", 3)
 
 
     NugEnergy:RegisterConfig("Focus", {
@@ -403,42 +346,6 @@ if isMainline then
         end,
     }, "DRUID")
 
-    NugEnergy:RegisterConfig("RageDruid", {
-        triggers = { GetSpecialization },
-        setup = function(self, spec)
-            self:ApplyConfig("GeneralRage")
-
-            self:SetPowerGetter(MakeGeneralGetPower(Enum.PowerType.Rage, 30, 10, nil, nil))
-        end,
-    }, "DRUID")
-
-    NugEnergy:RegisterConfig("ShapeshiftDruid", {
-        triggers = { GetSpecialization },
-
-        setup = function(self, spec)
-            self:RegisterEvent("UNIT_DISPLAYPOWER") -- Registering on main addon, not event proxy
-            self.UNIT_DISPLAYPOWER = function(self)
-                local newPowerType = select(2,UnitPowerType("player"))
-                self:ResetConfig()
-
-                if newPowerType == "ENERGY" then
-                    self:ApplyConfig("EnergyRogue")
-                    self:Update()
-                elseif newPowerType == "RAGE" then
-                    self:ApplyConfig("RageDruid")
-                    self:Update()
-                elseif GetSpecialization() == 1 then
-                    self:ApplyConfig("LunarPower")
-                    self:Update()
-                else
-                    self:Disable()
-                end
-            end
-            self.UNIT_DISPLAYPOWER(self)
-        end
-    }, "DRUID")
-
-
 end
 
 
@@ -448,7 +355,7 @@ end
 if APILevel <= 3 then
 
 
-    NugEnergy:RegisterConfig("EnergyRogue", {
+    NugEnergy:RegisterConfig("EnergyGeneral", {
         triggers = { GetSpecialization },
         setup = function(self, spec)
             self:SetPowerFilter("ENERGY", Enum.PowerType.Energy)
@@ -480,7 +387,7 @@ if APILevel <= 3 then
                 self:UpdateBarEffects("DISABLE_SMOOTHING")
             end
         end,
-    }, "ROGUE")
+    }, "GENERAL")
 
 
     if APILevel <= 2 then
@@ -521,6 +428,14 @@ if APILevel <= 3 then
 
                 self:SetPowerGetter(GetPower_ClassicMana)
                 -- self:SetPowerGetter(MakeManaGetPower(Enum.PowerType.Mana, 15))
+
+                self.fsrwatch = self.fsrwatch or self:Make5SRWatcher(function(self)
+                    local powerFilter = self:GetPowerFilter()
+                    if powerFilter == "MANA" then
+                        self:SelectConfig("GeneralFSRMana")
+                    end
+                end)
+                self.fsrwatch:Enable()
             end,
         }, "GENERAL")
 
@@ -557,14 +472,13 @@ if APILevel <= 3 then
                 self.fsrwatch = self.fsrwatch or self:Make5SRWatcher(function(self)
                     local powerFilter = self:GetPowerFilter()
                     if powerFilter == "MANA" then
-                        self:ApplyConfig("GeneralFSRMana")
+                        self:SelectConfig("GeneralFSRMana")
                     end
                 end)
                 self.fsrwatch:Enable()
 
                 self.ticker:Enable("FSR", function(self)
-                    self:ResetConfig()
-                    self:ApplyConfig("GeneralMana")
+                    self:SelectConfig("GeneralMana")
                     self.fsrwatch:Enable()
                     self:Update()
                 end)
@@ -618,7 +532,7 @@ if APILevel <= 3 then
 
 
 
-    NugEnergy:RegisterConfig("RageWarriorClassic", {
+    NugEnergy:RegisterConfig("RageGeneral", {
         triggers = { GetSpecialization },
         setup = function(self, spec)
             self:ApplyConfig("GeneralRage")
@@ -633,54 +547,7 @@ if APILevel <= 3 then
 
             self:SetPowerGetter(MakeGeneralGetPower(Enum.PowerType.Rage, 30, 10, nil, nil))
         end,
-    }, "WARRIOR")
-
-
-
-
-
-
-
-    NugEnergy:RegisterConfig("RageDruidClassic", {
-        triggers = { GetSpecialization },
-        setup = function(self, spec)
-            self:ApplyConfig("GeneralRage")
-
-            self:SetPowerGetter(MakeGeneralGetPower(Enum.PowerType.Rage, 30, 10, nil, nil))
-        end,
-    }, "DRUID")
-
-
-    NugEnergy:RegisterConfig("ShapeshiftDruidClassic", {
-        triggers = { GetSpecialization },
-
-        setup = function(self, spec)
-            self:RegisterEvent("UNIT_DISPLAYPOWER") -- Registering on main addon, not event proxy
-            self.UNIT_DISPLAYPOWER = function(self)
-                local newPowerType = select(2,UnitPowerType("player"))
-                self:ResetConfig()
-
-                if newPowerType == "ENERGY" then
-                    self:Enable()
-                    self:ApplyConfig("EnergyRogue")
-                    if APILevel == 2 and self.ticker then
-                        self.ticker:Reset()
-                    end
-                    self:Update()
-                elseif newPowerType == "RAGE" then
-                    self:Enable()
-                    self:ApplyConfig("RageDruidClassic")
-                    self:Update()
-                -- elseif newPowerType == "MANA" then
-                --     self:ApplyConfig("GeneralFSRMana")
-                --     self:Update()
-                else
-                    self:Disable()
-                end
-            end
-            self.UNIT_DISPLAYPOWER(self)
-        end
-    }, "DRUID")
+    }, "GENERAL")
 
     NugEnergy:RegisterConfig("RunicPower", {
         triggers = { GetSpecialization },

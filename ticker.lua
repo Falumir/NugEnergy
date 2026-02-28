@@ -1,19 +1,6 @@
-local lastEnergyTickTime = GetTime()
+local lastTickTime = GetTime() -- Used for both energy tick timing and FSR 5-second countdown
 local lastEnergyValue = 0
 local heartbeatPlayed = false
---[==[
-local GetPower_ClassicRogueTicker = function(shineZone, cappedZone, minLimit, throttleText)
-    return function(unit)
-        local p = GetTime() - lastEnergyTickTime
-        local p2 = UnitPower(unit, PowerTypeIndex)
-        local pmax = UnitPowerMax(unit, PowerTypeIndex)
-        local shine = shineZone and (p2 >= pmax-shineZone)
-        local capped = p2 >= pmax-cappedZone
-        -- local p2 = throttleText and math_modf(p2/5)*5 or p2
-        return p, p2, execute, shine, capped, (minLimit and p2 < minLimit)
-    end
-end
-]==]
 local EPT = Enum.PowerType
 local Enum_PowerType_Energy = EPT.Energy
 
@@ -38,11 +25,11 @@ local ClassicTickerOnUpdate = function(self)
             possibleTick = true
         end
     end
-    if now >= lastEnergyTickTime + 2 then
+    if now >= lastTickTime + 2 then
         possibleTick = true
     end
     if possibleTick then
-        lastEnergyTickTime = now
+        lastTickTime = now
         heartbeatPlayed = false
     end
     lastEnergyValue = currentEnergy
@@ -51,17 +38,17 @@ end
 local fsrCallback
 local ClassicTickerOnUpdateFSR = function(self)
     local now = GetTime()
-    if now >= lastEnergyTickTime + 5 then
+    if now >= lastTickTime + 5 then
         self:Disable()
         fsrCallback(NugEnergy)
     end
 end
 
 function ClassicTickerFrame:GetLastTickTime()
-    return lastEnergyTickTime
+    return lastTickTime
 end
 function ClassicTickerFrame:Reset()
-    lastEnergyTickTime = GetTime()
+    lastTickTime = GetTime()
 end
 function ClassicTickerFrame:Enable(mode, callback)
     if mode == "FSR" then
@@ -79,7 +66,7 @@ function ClassicTickerFrame:Disable()
 end
 
 function ClassicTickerFrame:GetTickProgress()
-    return GetTime() - lastEnergyTickTime
+    return GetTime() - lastTickTime
 end
 function ClassicTickerFrame:SetHeartbeatPlayed(status)
     heartbeatPlayed = status
@@ -188,11 +175,12 @@ function NugEnergy:Make5SRWatcher(default_callback)
     local callback = default_callback
 
     local lastManaDropTime = 0
+    local lastSpellCastTime = 0
     local prevMana = UnitPower("player", 0)
     f.UNIT_SPELLCAST_SUCCEEDED = function(self, event, unit)
         if unit == "player" then
-            local now = GetTime()
-            if now - lastManaDropTime < 0.01 then
+            lastSpellCastTime = GetTime()
+            if lastSpellCastTime - lastManaDropTime < 0.5 then
                 callback(NugEnergy)
             end
         end
