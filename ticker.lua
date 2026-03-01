@@ -173,45 +173,60 @@ function NugEnergy:Make5SRWatcher(default_callback)
     end)
 
     local callback = default_callback
-
+    local prevMana = UnitPower("player", 0)
     local lastManaDropTime = 0
     local lastSpellCastTime = 0
-    local prevMana = UnitPower("player", 0)
+    local lastCallbackTime = 0
+
+    local function tryCallback()
+        local now = GetTime()
+        if math.abs(lastSpellCastTime - lastManaDropTime) < 0.5
+            and now - lastCallbackTime > 0.5 then
+            -- Defer so UNIT_DISPLAYPOWER can fire first if this
+            -- is an instant cast from a shapeshift form
+            C_Timer.After(0, function()
+                if NugEnergy:GetPowerFilter() == "MANA" then
+                    lastCallbackTime = GetTime()
+                    callback(NugEnergy)
+                end
+            end)
+        end
+    end
+
     f.UNIT_SPELLCAST_SUCCEEDED = function(self, event, unit)
         if unit == "player" then
             lastSpellCastTime = GetTime()
-            if lastSpellCastTime - lastManaDropTime < 0.5 then
-                callback(NugEnergy)
-            end
+            tryCallback()
         end
     end
+
     f.UNIT_POWER_UPDATE = function(self, event, unit, ptype)
         if ptype == "MANA" then
             local mana = UnitPower("player", 0)
             if mana < prevMana then
                 lastManaDropTime = GetTime()
+                tryCallback()
             end
             prevMana = mana
         end
     end
 
+    -- Both events stay registered permanently so we never miss an instant
+    -- cast that fires before UNIT_DISPLAYPOWER switches the config.
+    -- The deferred PowerFilter check keeps it safe during rage/energy configs.
     f.Enable = function(self, new_callback)
+        prevMana = UnitPower("player", 0)
         self:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED")
         self:RegisterUnitEvent("UNIT_POWER_UPDATE", "player")
-        if new_callback then
-            callback = new_callback
-        end
+        if new_callback then callback = new_callback end
     end
-    f.Disable = function(self)
-        self:UnregisterEvent("UNIT_SPELLCAST_SUCCEEDED")
-        self:UnregisterEvent("UNIT_POWER_UPDATE")
-    end
+
+    f.Disable = function(self) end
 
     f.GetLastManaSpentTime = function(self)
         return lastManaDropTime
     end
 
     f:Enable()
-
     return f
 end
