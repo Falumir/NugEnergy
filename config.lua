@@ -421,7 +421,12 @@ if APILevel <= 3 then
                 self:SetMinMaxValues(0, 2)
 
                 self.eventProxy:RegisterUnitEvent("UNIT_POWER_UPDATE", "player")
-                self.eventProxy.UNIT_POWER_UPDATE = FILTERED_UNIT_POWER_UPDATE("MANA")
+                self.eventProxy.UNIT_POWER_UPDATE = function(self, event, unit, powertype)
+                    if powertype == "MANA" then
+                        NugEnergy:UpdateEnergy()
+                        NugEnergy:UpdateVisibility()
+                    end
+                end
 
                 self.ticker:Enable()
                 self.eventProxy:SetScript("OnUpdate", function() NugEnergy:UpdateEnergy() end)

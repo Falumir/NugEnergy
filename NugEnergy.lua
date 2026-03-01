@@ -116,7 +116,18 @@ local defaults = {
         textOffsetY = 0,
         textColor = {1,1,1, isClassic and 0.8 or 0.3},
         textOutline = "", -- can be "OUTLINE" or empty string
-        outOfCombatAlpha = 0,
+        hideWhenFullMana = true,
+        powerTypeAlpha = {
+            ENERGY      = 0,
+            RAGE        = 0,
+            MANA        = 0,
+            RUNIC_POWER = 0,
+            FOCUS       = 0,
+            FURY        = 0,
+            INSANITY    = 0,
+            MAELSTROM   = 0,
+            LUNAR_POWER = 0,
+        },
         isVertical = false,
 
         disabledPowerTypes = {},
@@ -347,8 +358,8 @@ local HideTimer = function(self, time)
     -- if p < 0 then p = 0 end
     -- local ooca = NugEnergy.db.profile.outOfCombatAlpha
     -- local a = ooca + ((1 - ooca) * p)
-    local pA = NugEnergy.db.profile.outOfCombatAlpha
-    local rA = 1 - NugEnergy.db.profile.outOfCombatAlpha
+    local pA = (PowerFilter and NugEnergy.db.profile.powerTypeAlpha[PowerFilter]) or 0
+    local rA = 1 - pA
     local a = pA + (p*rA)
     if a < 0 then a = 0 end
     nen:SetAlpha(a)
@@ -383,9 +394,20 @@ end
 
 function NugEnergy:UpdateVisibility()
     if self.isDisabled then self:Hide(); return end
-
+    if UnitIsDeadOrGhost("player") then self:Hide(); return end
+    local oocA = (PowerFilter and NugEnergy.db.profile.powerTypeAlpha[PowerFilter]) or 0
     local inCombat = UnitAffectingCombat("player")
     upvalueInCombat = inCombat
+
+    if PowerFilter == "MANA"
+        and NugEnergy.db.profile.hideWhenFullMana
+        and not inCombat
+        and UnitPower("player", Enum.PowerType.Mana) == UnitPowerMax("player", Enum.PowerType.Mana)
+    then
+        self:Hide()
+        return
+    end
+
     if (inCombat or
         ((class == "ROGUE" or class == "DRUID") and IsStealthed() and (self.ticker.isEnabled or (self.flags.shouldBeFull and not isFull))) or
         ForcedToShow)
@@ -396,10 +418,10 @@ function NugEnergy:UpdateVisibility()
         self:StopHiding()
         self:SetAlpha(1)
         self:Show()
-    elseif doFadeOut and self:IsVisible() and self:GetAlpha() > NugEnergy.db.profile.outOfCombatAlpha and PowerFilter then
+    elseif doFadeOut and self:IsVisible() and self:GetAlpha() > oocA and PowerFilter then
         self:StartHiding()
-    elseif NugEnergy.db.profile.outOfCombatAlpha > 0 and PowerFilter then
-        self:SetAlpha(NugEnergy.db.profile.outOfCombatAlpha)
+    elseif oocA > 0 and PowerFilter then
+        self:SetAlpha(oocA)
         self:Show()
     else
         self:Hide()
@@ -922,12 +944,8 @@ function NugEnergy.Create(self)
 
     f:SetPoint(NugEnergy.db.profile.point, UIParent, NugEnergy.db.profile.point, NugEnergy.db.profile.x, NugEnergy.db.profile.y)
 
-    local oocA = NugEnergy.db.profile.outOfCombatAlpha
-    if oocA > 0 then
-        f:SetAlpha(oocA)
-    else
-        f:Hide()
-    end
+    f:Hide()
+
 
     f:EnableMouse(false)
     f:RegisterForDrag("LeftButton")
@@ -1320,70 +1338,119 @@ function ns.GetProfileList(db)
 end
 local GetProfileList = ns.GetProfileList
 
+local selectedPowerType = "MANA"
+
+-- Determine the visible power types based on API version
+local powerTypeValues = {
+    ENERGY = "Energy",
+    RAGE   = "Rage",
+    MANA   = "Mana / FSR",
+}
+if APILevel >= 3 then
+    powerTypeValues.RUNIC_POWER = "Runic Power"
+end
+if APILevel >= 4 then
+    powerTypeValues.FOCUS = "Focus"
+end
+if APILevel >= 7 then
+    powerTypeValues.FURY        = "Fury"
+    powerTypeValues.INSANITY    = "Insanity"
+    powerTypeValues.MAELSTROM   = "Maelstrom"
+    powerTypeValues.LUNAR_POWER = "Lunar Power"
+end
+
 function NugEnergy:CreateGUI()
     local opt = {
         type = 'group',
         name = "NugEnergy Settings",
         order = 1,
         args = {
-            powerTypeToggles = {
-                type = "group",
-                name = "Enabled Power Types",
-                guiInline = true,
-                order = 0.5,
-                args = {
-                    ENERGY = {
-                        name = "Energy",
-                        type = "toggle",
-                        order = 1,
-                        get = function() return not NugEnergy.db.profile.disabledPowerTypes["ENERGY"] end,
-                        set = function()
-                            NugEnergy.db.profile.disabledPowerTypes["ENERGY"] = not NugEnergy.db.profile.disabledPowerTypes["ENERGY"] or nil
-                            NugEnergy:UpdateConfig()
-                        end,
-                    },
-                    RAGE = {
-                        name = "Rage",
-                        type = "toggle",
-                        order = 2,
-                        get = function() return not NugEnergy.db.profile.disabledPowerTypes["RAGE"] end,
-                        set = function()
-                            NugEnergy.db.profile.disabledPowerTypes["RAGE"] = not NugEnergy.db.profile.disabledPowerTypes["RAGE"] or nil
-                            NugEnergy:UpdateConfig()
-                        end,
-                    },
-                    MANA = {
-                        name = "Mana / FSR",
-                        type = "toggle",
-                        order = 3,
-                        get = function() return not NugEnergy.db.profile.disabledPowerTypes["MANA"] end,
-                        set = function()
-                            NugEnergy.db.profile.disabledPowerTypes["MANA"] = not NugEnergy.db.profile.disabledPowerTypes["MANA"] or nil
-                            NugEnergy:UpdateConfig()
-                        end,
-                    },
-                    RUNIC_POWER = {
-                        name = "Runic Power",
-                        type = "toggle",
-                        order = 4,
-                        get = function() return not NugEnergy.db.profile.disabledPowerTypes["RUNIC_POWER"] end,
-                        set = function()
-                            NugEnergy.db.profile.disabledPowerTypes["RUNIC_POWER"] = not NugEnergy.db.profile.disabledPowerTypes["RUNIC_POWER"] or nil
-                            NugEnergy:UpdateConfig()
-                        end,
-                    },
-                    FOCUS = {
-                        name = "Focus",
-                        type = "toggle",
-                        order = 5,
-                        get = function() return not NugEnergy.db.profile.disabledPowerTypes["FOCUS"] end,
-                        set = function()
-                            NugEnergy.db.profile.disabledPowerTypes["FOCUS"] = not NugEnergy.db.profile.disabledPowerTypes["FOCUS"] or nil
-                            NugEnergy:UpdateConfig()
-                        end,
-                    },
+        powerTypeSelect = {
+            type = "select",
+            name = "Power Type",
+            order = 0.4,
+            values = powerTypeValues,
+            get = function() return selectedPowerType end,
+            set = function(info, v)
+                selectedPowerType = v
+                NugEnergy:NotifyGUI()
+            end,
+        },
+        powerTypeConfig = {
+            type = "group",
+            name = "Power Type Settings",
+            guiInline = true,
+            order = 0.5,
+            args = {
+                enabled = {
+                    name = "Enabled",
+                    type = "toggle",
+                    order = 1,
+                    get = function()
+                        return not NugEnergy.db.profile.disabledPowerTypes[selectedPowerType]
+                    end,
+                    set = function(info, v)
+                        NugEnergy.db.profile.disabledPowerTypes[selectedPowerType] = not v or nil
+                        NugEnergy:UpdateConfig()
+                    end,
+                },
+                powerTypeColor = {
+                    name = "Power Type Color",
+                    type = "color",
+                    order = 1.5,
+                    hidden = function()
+                        return not NugEnergy.db.profile.enableColorByPowerType
+                    end,
+                    get = function()
+                        local c = NugEnergy.db.profile.powerTypeColors[selectedPowerType]
+                        return c[1], c[2], c[3]
+                    end,
+                    set = function(info, r, g, b)
+                        NugEnergy.db.profile.powerTypeColors[selectedPowerType] = {r, g, b}
+                        NugEnergy:SetNormalColor()
+                    end,
+                },
+                linebreak1 = {
+                    type = "description",
+                    name = "",
+                    order = 1.9,
+                    width = "full",
+                },
+                oocAlpha = {
+                    name = "Out of Combat Alpha",
+                    desc = "0 = hidden, 1 = fully visible",
+                    type = "range",
+                    order = 2,
+                    min = 0, max = 1, step = 0.05,
+                    get = function()
+                        return NugEnergy.db.profile.powerTypeAlpha[selectedPowerType] or 0
+                    end,
+                    set = function(info, v)
+                        NugEnergy.db.profile.powerTypeAlpha[selectedPowerType] = v
+                        NugEnergy:UpdateVisibility()
+                    end,
+                },
+                linebreak2 = {
+                    type = "description",
+                    name = "",
+                    order = 2.9,
+                    width = "full",
+                },
+                hideWhenFull = {
+                    name = "Hide When Full",
+                    type = "toggle",
+                    order = 3,
+                    hidden = function() return selectedPowerType ~= "MANA" end,
+                    get = function()
+                        return NugEnergy.db.profile.hideWhenFullMana
+                    end,
+                    set = function(info, v)
+                        NugEnergy.db.profile.hideWhenFullMana = v
+                        NugEnergy:UpdateVisibility()
+                    end,
                 },
             },
+        },
             unlock = {
                 name = L"Unlock",
                 type = "execute",
@@ -1512,160 +1579,11 @@ function NugEnergy:CreateGUI()
                             NugEnergy:SetNormalColor()
                         end
                     },
-                    customColorGroup = {
-                        type = "group",
-                        name = "Custom Power Colors",
-                        disabled = function() return not NugEnergy.db.profile.enableColorByPowerType end,
-                        order = 1.2,
-                        args = {
-                            Energy = {
-                                name = L"Energy",
-                                type = 'color',
-                                order = 1,
-                                width = 0.6,
-                                get = function(info)
-                                    local r,g,b = unpack(NugEnergy.db.profile.powerTypeColors["ENERGY"])
-                                    return r,g,b
-                                end,
-                                set = function(info, r, g, b)
-                                    NugEnergy.db.profile.powerTypeColors["ENERGY"] = {r,g,b}
-                                    NugEnergy:SetNormalColor()
-                                end,
-                            },
-                            Focus = {
-                                name = L"Focus",
-                                type = 'color',
-                                order = 2,
-                                width = 0.6,
-                                get = function(info)
-                                    local r,g,b = unpack(NugEnergy.db.profile.powerTypeColors["FOCUS"])
-                                    return r,g,b
-                                end,
-                                set = function(info, r, g, b)
-                                    NugEnergy.db.profile.powerTypeColors["FOCUS"] = {r,g,b}
-                                    NugEnergy:SetNormalColor()
-                                end,
-                            },
-                            RAGE = {
-                                name = L"Rage",
-                                type = 'color',
-                                order = 3,
-                                width = 0.6,
-                                get = function(info)
-                                    local r,g,b = unpack(NugEnergy.db.profile.powerTypeColors["RAGE"])
-                                    return r,g,b
-                                end,
-                                set = function(info, r, g, b)
-                                    NugEnergy.db.profile.powerTypeColors["RAGE"] = {r,g,b}
-                                    NugEnergy:SetNormalColor()
-                                end,
-                            },
-                            RUNIC_POWER = {
-                                name = L"Runic Power",
-                                type = 'color',
-                                order = 4,
-                                width = 0.6,
-                                get = function(info)
-                                    local r,g,b = unpack(NugEnergy.db.profile.powerTypeColors["RUNIC_POWER"])
-                                    return r,g,b
-                                end,
-                                set = function(info, r, g, b)
-                                    NugEnergy.db.profile.powerTypeColors["RUNIC_POWER"] = {r,g,b}
-                                    NugEnergy:SetNormalColor()
-                                end,
-                            },
-                            LUNAR_POWER = {
-                                name = L"Lunar Power",
-                                type = 'color',
-                                order = 5,
-                                width = 0.6,
-                                get = function(info)
-                                    local r,g,b = unpack(NugEnergy.db.profile.powerTypeColors["LUNAR_POWER"])
-                                    return r,g,b
-                                end,
-                                set = function(info, r, g, b)
-                                    NugEnergy.db.profile.powerTypeColors["LUNAR_POWER"] = {r,g,b}
-                                    NugEnergy:SetNormalColor()
-                                end,
-                            },
-                            FURY = {
-                                name = L"Fury",
-                                type = 'color',
-                                order = 6,
-                                width = 0.6,
-                                get = function(info)
-                                    local r,g,b = unpack(NugEnergy.db.profile.powerTypeColors["FURY"])
-                                    return r,g,b
-                                end,
-                                set = function(info, r, g, b)
-                                    NugEnergy.db.profile.powerTypeColors["FURY"] = {r,g,b}
-                                    NugEnergy:SetNormalColor()
-                                end,
-                            },
-                            INSANITY = {
-                                name = L"Insanity",
-                                type = 'color',
-                                order = 7,
-                                width = 0.6,
-                                get = function(info)
-                                    local r,g,b = unpack(NugEnergy.db.profile.powerTypeColors["INSANITY"])
-                                    return r,g,b
-                                end,
-                                set = function(info, r, g, b)
-                                    NugEnergy.db.profile.powerTypeColors["INSANITY"] = {r,g,b}
-                                    NugEnergy:SetNormalColor()
-                                end,
-                            },
-                            MAELSTROM = {
-                                name = L"Maelstrom",
-                                type = 'color',
-                                order = 9,
-                                width = 0.6,
-                                get = function(info)
-                                    local r,g,b = unpack(NugEnergy.db.profile.powerTypeColors["MAELSTROM"])
-                                    return r,g,b
-                                end,
-                                set = function(info, r, g, b)
-                                    NugEnergy.db.profile.powerTypeColors["MAELSTROM"] = {r,g,b}
-                                    NugEnergy:SetNormalColor()
-                                end,
-                            },
-                            MANA = {
-                                name = L"Mana",
-                                type = 'color',
-                                order = 10,
-                                width = 0.6,
-                                get = function(info)
-                                    local r,g,b = unpack(NugEnergy.db.profile.powerTypeColors["MANA"])
-                                    return r,g,b
-                                end,
-                                set = function(info, r, g, b)
-                                    NugEnergy.db.profile.powerTypeColors["MANA"] = {r,g,b}
-                                    NugEnergy:SetNormalColor()
-                                end,
-                            },
-                        }
-                    },
                     fadeGroup = {
                         type = "group",
                         name = "",
                         order = 1.5,
                         args = {
-                            font = {
-                                name = L"Out of Combat Alpha",
-                                desc = "0 = disabled",
-                                type = "range",
-                                get = function(info) return NugEnergy.db.profile.outOfCombatAlpha end,
-                                set = function(info, v)
-                                    NugEnergy.db.profile.outOfCombatAlpha = tonumber(v)
-                                    NugEnergy:Hide()
-                                    NugEnergy:UPDATE_STEALTH()
-                                end,
-                                min = 0,
-                                max = 1,
-                                step = 0.05,
-                                order = 1,
-                            },
                             borderType = {
                                 type = "select",
                                 name = L"Border Type",
